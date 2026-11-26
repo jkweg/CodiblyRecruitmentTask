@@ -22,7 +22,7 @@ class CarbonIntensityClientTest {
 
         server.expect(request -> assertEquals(
                 "/generation/2026-11-27T00:00Z/2026-11-27T00:30Z",
-                request.getURI().getPath()
+                request.getURI().getRawPath()
         )).andRespond(withSuccess("""
                 {
                   "data": [

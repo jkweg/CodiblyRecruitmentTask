@@ -27,10 +27,11 @@ public class CarbonIntensityClient {
     }
 
     public List<GenerationSlot> fetchGeneration(Instant from, Instant to) {
+        // The upstream endpoint rejects timestamps with percent-encoded colons.
+        String path = "/generation/%s/%s".formatted(
+                API_TIMESTAMP_FORMAT.format(from), API_TIMESTAMP_FORMAT.format(to));
         GenerationResponse response = restClient.get()
-                .uri("/generation/{from}/{to}",
-                        API_TIMESTAMP_FORMAT.format(from),
-                        API_TIMESTAMP_FORMAT.format(to))
+                .uri(path)
                 .retrieve()
                 .body(GenerationResponse.class);
 
