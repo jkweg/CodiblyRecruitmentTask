@@ -3,6 +3,9 @@
 Aplikacja do zadania rekrutacyjnego Codibly IT Academy. Pozwala porównać miks energii Wielkiej Brytanii, znaleźć ciągłe okno ładowania z najwyższym udziałem czystej energii oraz zarezerwować ładowarkę. W kalendarzu widać zajęte przedziały, a własne rezerwacje można anulować.
 
 - [Otwórz aplikację](https://codibly-recruitment-task-beta.vercel.app/)
+
+  Po okresie bezczynności pierwsze pobranie danych może potrwać około 1–2 minut, ponieważ backend na Renderze musi się uruchomić.
+
 - [Repozytorium na GitHubie](https://github.com/jkweg/CodiblyRecruitmentTask)
 
 ## Architektura
@@ -15,7 +18,7 @@ Aplikacja do zadania rekrutacyjnego Codibly IT Academy. Pozwala porównać miks 
 
 Przeglądarka korzysta ze względnych adresów `/api`. Lokalnie Vite przekazuje je do Spring Boota na porcie `8080`. [Na Vercelu](frontend/vercel.json) te same ścieżki prowadzą do Rendera.
 
-27 listopada 2026 r. publiczna strona oraz `/api/chargers`, `/api/energy/mix` i `/api/energy/best-window?hours=1` przez Vercel zwróciły HTTP `200`. Pełny scenariusz rezerwacji z dwiema sesjami oraz zachowanie klienta energii podczas timeoutu sprawdzono lokalnie. Próby po starcie Rendera i publiczny przepływ rezerwacji opisano niżej.
+Podczas publicznego odbioru 27.11.2026 na commicie `4ff1b30` strona, lista ładowarek oraz oba odczyty energii (`/api/energy/mix` i `/api/energy/best-window?hours=1`) zwróciły przez Vercel HTTP `200`. Utworzenie rezerwacji zwróciło `201`, a rezerwacja pozostała widoczna po odświeżeniu strony. Próba zajęcia tego samego terminu w drugiej sesji zwróciła `409`. Anulowanie w pierwszej sesji zwróciło `204` i zwolniło termin. Działanie obu odczytów energii bezpośrednio po starcie Rendera pozostaje niezweryfikowane. Procedurę ponownego odbioru opisano w sekcji [Sprawdzenia po wdrożeniu](#sprawdzenia-po-wdrożeniu).
 
 ## Uruchomienie lokalne
 
