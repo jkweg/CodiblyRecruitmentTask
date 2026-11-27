@@ -23,7 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ReservationHttpTest {
     private static final Instant START = Instant.parse("2026-12-01T10:00:00Z");
     private final ReservationService service = mock(ReservationService.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new ReservationController(service)).build();
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new ReservationController(service))
+            .setControllerAdvice(new ReservationExceptionHandler())
+            .build();
 
     @ParameterizedTest
     @NullSource

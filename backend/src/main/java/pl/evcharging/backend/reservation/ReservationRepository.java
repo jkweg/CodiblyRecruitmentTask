@@ -13,10 +13,28 @@ interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
     List<Reservation> findAllByOwnerIdOrderByStartsAtAscIdAsc(UUID ownerId);
 
-    List<Reservation> findAllByChargerIdAndStartsAtLessThanAndEndsAtGreaterThanOrderByStartsAtAsc(
-            long chargerId, Instant to, Instant from);
+    @Query("""
+            select reservation from Reservation reservation
+            where reservation.chargerId = :chargerId
+              and reservation.startsAt < :rangeEnd
+              and reservation.endsAt > :rangeStart
+            order by reservation.startsAt asc
+            """)
+    List<Reservation> findBusyPeriods(
+            @Param("chargerId") long chargerId, @Param("rangeStart") Instant rangeStart,
+            @Param("rangeEnd") Instant rangeEnd);
 
-    boolean existsByChargerIdAndStartsAtLessThanAndEndsAtGreaterThan(long chargerId, Instant to, Instant from);
+    @Query("""
+            select exists (
+                select 1 from Reservation reservation
+                where reservation.chargerId = :chargerId
+                  and reservation.startsAt < :requestedEnd
+                  and reservation.endsAt > :requestedStart
+            )
+            """)
+    boolean hasConflict(
+            @Param("chargerId") long chargerId, @Param("requestedStart") Instant requestedStart,
+            @Param("requestedEnd") Instant requestedEnd);
 
     @Modifying
     @Query("delete from Reservation reservation where reservation.id = :id and reservation.ownerId = :ownerId")

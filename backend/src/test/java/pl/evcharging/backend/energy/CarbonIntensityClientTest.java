@@ -19,8 +19,10 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -45,6 +47,7 @@ class CarbonIntensityClientTest {
 
     private static final Instant FROM = Instant.parse("2026-11-27T00:00:00Z");
     private static final Instant TO = Instant.parse("2026-11-27T00:30:00Z");
+    private static final Clock CLOCK = Clock.fixed(FROM, ZoneOffset.UTC);
     private static final String GENERATION = """
             {"data":[{"from":"2026-11-27T00:00Z","to":"2026-11-27T00:30Z","generationmix":[{"fuel":"wind","perc":42.5}]}]}
             """;
@@ -114,7 +117,7 @@ class CarbonIntensityClientTest {
             }
         });
         var mvc = MockMvcBuilders.standaloneSetup(new EnergyController(
-                new EnergyMixService(newClient(Duration.ofSeconds(5))))).build();
+                new EnergyMixService(newClient(Duration.ofSeconds(5)), CLOCK))).build();
 
         long started = System.nanoTime();
         mvc.perform(get("/api/energy/mix"))
@@ -181,7 +184,7 @@ class CarbonIntensityClientTest {
             }
         });
         var mvc = MockMvcBuilders.standaloneSetup(new EnergyController(
-                new EnergyMixService(newClient(Duration.ofSeconds(5))))).build();
+                new EnergyMixService(newClient(Duration.ofSeconds(5)), CLOCK))).build();
 
         mvc.perform(get("/api/energy/best-window").param("hours", "2")).andExpect(status().isNoContent());
         assertEquals(1, calls.get());

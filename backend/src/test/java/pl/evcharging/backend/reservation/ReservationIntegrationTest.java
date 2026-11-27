@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 import tools.jackson.databind.ObjectMapper;
 
 import javax.sql.DataSource;
@@ -58,6 +59,8 @@ class ReservationIntegrationTest {
     @Autowired
     private ReservationController controller;
     @Autowired
+    private WebApplicationContext webContext;
+    @Autowired
     private ReservationRepository reservations;
     @Autowired
     private DataSource dataSource;
@@ -73,7 +76,9 @@ class ReservationIntegrationTest {
     @BeforeEach
     void setUp() {
         when(clock.instant()).thenReturn(Instant.parse("2026-10-24T00:00:00Z"));
-        mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new ReservationExceptionHandler())
+                .build();
     }
 
     @AfterEach
@@ -98,10 +103,13 @@ class ReservationIntegrationTest {
         long id = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").longValue();
         assertTrue(reservations.existsById(id));
         mvc.perform(get(RESERVATIONS).cookie(firstOwner))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(id));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(id))
+                .andExpect(header().doesNotExist("Set-Cookie"));
         mvc.perform(get(RESERVATIONS).cookie(secondOwner)).andExpect(jsonPath("$.length()").value(0));
-        mvc.perform(delete(RESERVATIONS + "/{id}", id).cookie(secondOwner)).andExpect(status().isNotFound());
-        create(secondOwner, 1, START, "2").andExpect(status().isConflict());
+        mvc.perform(delete(RESERVATIONS + "/{id}", id).cookie(secondOwner)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").value("Nie znaleziono rezerwacji."));
+        create(secondOwner, 1, START, "2").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Wybrana ładowarka jest zajęta w tym terminie."));
         availability(1, "2026-10-25T02:00:00Z", "2026-10-25T03:00:00Z")
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].start").value("2026-10-25T00:30:00Z"))
                 .andExpect(jsonPath("$[0].end").value(END))
@@ -118,12 +126,15 @@ class ReservationIntegrationTest {
     @Test
     void allowsAdjacentReservationsAndConcurrentUseOfDifferentChargers() throws Exception {
         Cookie owner = newOwner();
-        create(owner, 1, "2026-10-26T10:00:00Z", "1").andExpect(status().isCreated());
-        create(owner, 1, "2026-10-26T11:00:00Z", "1").andExpect(status().isCreated());
+        create(owner, 1, "2026-10-26T10:00:00.123456789Z", "1").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.end").value("2026-10-26T11:00:00.123456Z"));
+        create(owner, 1, "2026-10-26T11:00:00.123456Z", "1").andExpect(status().isCreated());
         create(owner, 2, "2026-10-26T10:00:00Z", "6").andExpect(status().isCreated())
                 .andExpect(jsonPath("$.end").value("2026-10-26T16:00:00Z"));
         availability(1, "2026-10-26T10:30:00Z", "2026-10-26T11:30:00Z")
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].start").value("2026-10-26T10:00:00.123456Z"))
+                .andExpect(jsonPath("$[1].start").value("2026-10-26T11:00:00.123456Z"));
     }
 
     @Test
@@ -135,14 +146,31 @@ class ReservationIntegrationTest {
                                 {"chargerId":3,"start":"2026-10-27T10:00:00Z","hours":1,"ownerId":"%s"}
                                 """.formatted(otherOwner.getValue())))
                 .andExpect(status().isCreated())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(header().string("Set-Cookie", containsString("Secure")))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Lax")))
                 .andReturn();
         Cookie owner = result.getResponse().getCookie(OWNER_COOKIE);
         assertNotNull(owner);
+        assertTrue(owner.isHttpOnly());
+        assertEquals(RESERVATIONS, owner.getPath());
+        assertEquals(365 * 24 * 60 * 60, owner.getMaxAge());
         testOwners.add(UUID.fromString(owner.getValue()));
         assertNotEquals(otherOwner.getValue(), owner.getValue());
         mvc.perform(get(RESERVATIONS).cookie(otherOwner)).andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get(RESERVATIONS).cookie(owner)).andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void springMvcDiscoversReservationAdvice() throws Exception {
+        var applicationMvc = MockMvcBuilders.webAppContextSetup(webContext).build();
+        applicationMvc.perform(post(RESERVATIONS).contentType(MediaType.APPLICATION_JSON).content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Podaj poprawny JSON z polami chargerId, start i hours."))
+                .andExpect(header().doesNotExist("Set-Cookie"));
+        applicationMvc.perform(delete(RESERVATIONS + "/{id}", "invalid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Identyfikator musi być liczbą całkowitą."));
     }
 
     @ParameterizedTest
@@ -188,9 +216,8 @@ class ReservationIntegrationTest {
                 blocker.rollback();
             }
         }
-        assertEquals(1, reservations
-                .findAllByChargerIdAndStartsAtLessThanAndEndsAtGreaterThanOrderByStartsAtAsc(
-                        1, Instant.parse("2026-10-28T12:00:00Z"), Instant.parse(start)).size());
+        assertEquals(1, reservations.findBusyPeriods(
+                1, Instant.parse(start), Instant.parse("2026-10-28T12:00:00Z")).size());
     }
 
     private boolean bothRequestsWaitForLocks(Connection blocker) throws Exception {

@@ -1,17 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import ReservationCalendar from './ReservationCalendar'
-import { readReservations, reservationsPath } from './reservationApi'
-import type { Charger, Reservation } from './reservationApi'
+import type { Charger } from './reservationApi'
 import { isPast, londonDateTime, londonStart } from './reservationTime'
+import { useReservations } from './useReservations'
 import './ReservationsSection.css'
-
-type OwnReservations =
-  | { status: 'loading' | 'error' }
-  | { status: 'ready'; reservations: Reservation[] }
-
-type Pending = { kind: 'create' } | { kind: 'cancel'; id: number }
-type Notice = { kind: 'error' | 'success'; text: string }
 
 const durationOptions = [1, 2, 3, 4, 5, 6]
 
@@ -23,59 +16,11 @@ export default function ReservationsSection({ chargers, chargerStatus }: {
   const chargerId = chargers.find(({ id }) => id === selection)?.id ?? chargers[0]?.id
   const [start, setStart] = useState('')
   const [hours, setHours] = useState(1)
-  const [own, setOwn] = useState<OwnReservations>({ status: 'loading' })
-  const [sessionAttempt, setSessionAttempt] = useState(0)
-  const [calendarRevision, setCalendarRevision] = useState(0)
-  const [pending, setPending] = useState<Pending | null>(null)
-  const [notice, setNotice] = useState<Notice | null>(null)
-  const sessionRequest = useRef<Promise<Reservation[]> | null>(null)
-  const mutationPending = useRef(false)
+  const { own, pending, notice, calendarRevision, retrySession, showError, reserve, cancel } = useReservations()
 
-  useEffect(() => {
-    let current = true
-    // Reuse the first GET during React's effect replay so only one owner cookie is issued.
-    sessionRequest.current ??= readReservations()
-    sessionRequest.current.then(
-      (reservations) => { if (current) setOwn({ status: 'ready', reservations }) },
-      () => { if (current) setOwn({ status: 'error' }) },
-    )
-    return () => { current = false }
-  }, [sessionAttempt])
-
-  function retrySession() {
-    sessionRequest.current = null
-    setOwn({ status: 'loading' })
-    setSessionAttempt((value) => value + 1)
-  }
-
-  function showError(text: string) {
-    setNotice({ kind: 'error', text })
-  }
-
-  function beginMutation(operation: Pending) {
-    if (mutationPending.current || own.status !== 'ready') return false
-    mutationPending.current = true
-    setPending(operation)
-    setNotice(null)
-    return true
-  }
-
-  function endMutation() {
-    mutationPending.current = false
-    setPending(null)
-  }
-
-  function updateReservations(update: (reservations: Reservation[]) => Reservation[], text: string) {
-    setOwn((current) => current.status === 'ready'
-      ? { status: 'ready', reservations: update(current.reservations) }
-      : current)
-    setCalendarRevision((value) => value + 1)
-    setNotice({ kind: 'success', text })
-  }
-
-  async function reserve(event: FormEvent<HTMLFormElement>) {
+  function submitReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (chargerId === undefined || own.status !== 'ready' || mutationPending.current) return
+    if (chargerId === undefined || own.status !== 'ready' || pending !== null) return
     const plannedStart = londonStart(start)
     if (plannedStart.status === 'missing') {
       showError('Ta godzina nie istnieje w Londynie z powodu zmiany czasu. Wybierz inną godzinę.')
@@ -89,54 +34,7 @@ export default function ReservationsSection({ chargers, chargerStatus }: {
       showError('Wybierz poprawną datę i godzinę rozpoczęcia w przyszłości.')
       return
     }
-    if (!beginMutation({ kind: 'create' })) return
-
-    try {
-      const response = await fetch(reservationsPath, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chargerId, start: plannedStart.instant, hours }),
-      })
-      if (response.status === 409) {
-        setCalendarRevision((value) => value + 1)
-        showError('Ładowarka jest zajęta w tym terminie. Sprawdź kalendarz i wybierz inny termin.')
-        return
-      }
-      if (response.status === 400) {
-        showError('Sprawdź datę, godzinę rozpoczęcia i czas trwania rezerwacji.')
-        return
-      }
-      if (response.status === 404) {
-        showError('Ta ładowarka jest niedostępna. Wybierz inną ładowarkę.')
-        return
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const reservation: Reservation = await response.json()
-      updateReservations((list) => [...list, reservation].sort((a, b) => Date.parse(a.start) - Date.parse(b.start)),
-        'Rezerwacja została zapisana.')
-    } catch {
-      showError('Nie udało się zapisać rezerwacji. Odśwież stronę i sprawdź listę przed ponowieniem.')
-    } finally {
-      endMutation()
-    }
-  }
-
-  async function cancel(id: number) {
-    if (!beginMutation({ kind: 'cancel', id })) return
-    try {
-      const response = await fetch(`${reservationsPath}/${id}`, { method: 'DELETE', credentials: 'same-origin' })
-      if (response.status === 404) {
-        showError('Ta rezerwacja jest już niedostępna. Odśwież stronę, żeby pobrać aktualną listę.')
-        return
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      updateReservations((list) => list.filter((reservation) => reservation.id !== id), 'Rezerwacja została anulowana.')
-    } catch {
-      showError('Nie udało się anulować rezerwacji. Odśwież stronę, żeby sprawdzić jej stan.')
-    } finally {
-      endMutation()
-    }
+    void reserve({ chargerId, start: plannedStart.instant, hours })
   }
 
   return (
@@ -154,7 +52,7 @@ export default function ReservationsSection({ chargers, chargerStatus }: {
           )}
           {chargerStatus === 'success' && chargers.length === 0 && <p role="status">Brak ładowarek do wyświetlenia.</p>}
 
-          <form className="reservation-fields" onSubmit={reserve}>
+          <form className="reservation-fields" onSubmit={submitReservation}>
             <label className="reservation-charger">Ładowarka do rezerwacji i kalendarza
               <select value={chargerId ?? ''} disabled={chargers.length === 0 || pending !== null}
                 onChange={(event) => setSelection(Number(event.target.value))}>

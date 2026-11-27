@@ -79,6 +79,31 @@ test('initializes one owner session in StrictMode and blocks the first write unt
   expect(activeButton().disabled).toBe(false)
 })
 
+test('retries a failed owner session read before allowing a reservation', async () => {
+  const retry = deferredResponse()
+  const list = vi.fn(() => retry.promise)
+    .mockResolvedValueOnce(new Response(null, { status: 502 }))
+  const create = vi.fn(() => Response.json(saved, { status: 201 }))
+  mockApi({ list, create })
+  render(<StrictMode><App /></StrictMode>)
+
+  const retryButton = await ownList().findByRole('button', { name: 'Ponów odczyt rezerwacji' })
+  expect(activeButton().disabled).toBe(true)
+  expect(list).toHaveBeenCalledTimes(1)
+  fireEvent.click(retryButton)
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+  expect(activeButton().disabled).toBe(true)
+  fireEvent.submit(activeButton().closest('form')!)
+  expect(create).not.toHaveBeenCalled()
+
+  await act(async () => retry.resolve(Response.json([])))
+  await fillForm()
+  fireEvent.click(activeButton())
+  expect(await ownList().findByText('Pierwsza ładowarka')).toBeTruthy()
+  expect(create).toHaveBeenCalledTimes(1)
+  expect(list).toHaveBeenCalledTimes(2)
+})
+
 test('creates a reservation while energy is unavailable and refreshes own list and calendar', async () => {
   let isBusy = false
   const created = { ...saved, start: '2026-07-01T09:00:00Z', end: '2026-07-01T11:00:00Z' }
@@ -91,8 +116,10 @@ test('creates a reservation while energy is unavailable and refreshes own list a
   expect(await calendar().findByText('Brak rezerwacji.')).toBeTruthy()
   const before = availability.mock.calls.length
   const form = activeButton().closest('form')!
-  fireEvent.submit(form)
-  fireEvent.submit(form)
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
   const posts = api.mock.calls.filter(([path, options]) => path === '/api/reservations' && options?.method === 'POST')
   expect(posts).toHaveLength(1)
   expect(posts[0][1]?.credentials).toBe('same-origin')
@@ -133,8 +160,10 @@ test('cancels once, handles 204 without JSON and releases the current calendar i
   fireEvent.change(screen.getByLabelText('Data w kalendarzu'), { target: { value: '2026-12-01' } })
   expect(await calendar().findByText(/10:00/)).toBeTruthy()
   const button = await ownList().findByRole('button', { name: /Anuluj rezerwację/ })
-  fireEvent.click(button)
-  fireEvent.click(button)
+  act(() => {
+    fireEvent.click(button)
+    fireEvent.click(button)
+  })
   expect(cancel).toHaveBeenCalledTimes(1)
   isBusy = false
   await act(async () => write.resolve(response))

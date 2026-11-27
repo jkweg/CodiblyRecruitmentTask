@@ -41,7 +41,7 @@ public class ReservationService {
         }
         Instant startsAt = start.truncatedTo(ChronoUnit.MICROS);
         Instant endsAt = startsAt.plus(hours, ChronoUnit.HOURS);
-        if (reservations.existsByChargerIdAndStartsAtLessThanAndEndsAtGreaterThan(chargerId, endsAt, startsAt)) {
+        if (reservations.hasConflict(chargerId, startsAt, endsAt)) {
             throw new ReservationException(CONFLICT, "Wybrana ładowarka jest zajęta w tym terminie.");
         }
         return reservations.save(new Reservation(chargerId, ownerId, startsAt, endsAt));
@@ -67,7 +67,7 @@ public class ReservationService {
         if (!chargers.existsById(chargerId)) {
             throw chargerNotFound();
         }
-        return reservations.findAllByChargerIdAndStartsAtLessThanAndEndsAtGreaterThanOrderByStartsAtAsc(chargerId, to, from);
+        return reservations.findBusyPeriods(chargerId, from, to);
     }
 
     private static ReservationException chargerNotFound() {

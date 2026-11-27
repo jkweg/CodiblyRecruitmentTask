@@ -2,9 +2,11 @@ package pl.evcharging.backend.energy;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,8 +15,8 @@ import static org.mockito.Mockito.*;
 
 class ChargingWindowTest {
     private final CarbonIntensityClient client = mock(CarbonIntensityClient.class);
-    private final EnergyMixService service = new EnergyMixService(client);
     private final LocalDate today = LocalDate.of(2026, 11, 27);
+    private final EnergyMixService service = serviceOn(today);
     private final Instant from = Instant.parse("2026-11-28T00:00:00Z");
     private final Instant to = Instant.parse("2026-11-30T00:00:00Z");
 
@@ -28,7 +30,7 @@ class ChargingWindowTest {
         when(client.fetchGeneration(from, to)).thenReturn(List.of(peak, slot(from, 10),
                 slot(midnight.minusSeconds(1800), 60), slot(from.plusSeconds(1800), 10), peak));
         assertEquals(new ChargingWindow(midnight.minusSeconds(1800), midnight.plusSeconds(1800), 70),
-                service.findBestWindow(1, today).orElseThrow());
+                service.findBestWindow(1).orElseThrow());
     }
 
     @Test
@@ -36,7 +38,7 @@ class ChargingWindowTest {
         when(client.fetchGeneration(from, to)).thenReturn(List.of(slot(from, 0.3), slot(from.plusSeconds(1800), 0),
                 slot(from.plusSeconds(7200), 0.1), slot(from.plusSeconds(9000), 0.2)));
         assertEquals(new ChargingWindow(from, from.plusSeconds(3600), 0.15),
-                service.findBestWindow(1, today).orElseThrow());
+                service.findBestWindow(1).orElseThrow());
     }
 
     @Test
@@ -48,7 +50,7 @@ class ChargingWindowTest {
         slots.add(slot(to, 100));
         when(client.fetchGeneration(from, to)).thenReturn(slots);
         assertEquals(new ChargingWindow(to.minusSeconds(21600), to, 25),
-                service.findBestWindow(6, today).orElseThrow());
+                service.findBestWindow(6).orElseThrow());
     }
 
     @Test
@@ -56,7 +58,7 @@ class ChargingWindowTest {
         when(client.fetchGeneration(from, to)).thenReturn(List.of(slot(from.minusSeconds(1800), 100),
                 slot(from, 100), slot(from, 100), slot(from.plusSeconds(1800), -1),
                 slot(from.plusSeconds(3600), 100), slot(to.minusSeconds(1800), 100), slot(to, 100)));
-        assertTrue(service.findBestWindow(1, today).isEmpty());
+        assertTrue(service.findBestWindow(1).isEmpty());
     }
 
     @Test
@@ -68,8 +70,8 @@ class ChargingWindowTest {
         when(client.fetchGeneration(from, to)).thenReturn(forecast);
         when(client.fetchGeneration(from, to.plus(Duration.ofDays(1)))).thenReturn(forecast);
 
-        assertTrue(service.findBestWindow(1, today).isEmpty());
-        DailyEnergyMix dailyMix = service.getDailyMix(today.plusDays(1)).getFirst();
+        assertTrue(service.findBestWindow(1).isEmpty());
+        DailyEnergyMix dailyMix = serviceOn(today.plusDays(1)).getDailyMix().getFirst();
         assertEquals(1, dailyMix.availableSlots());
         assertEquals(25.0, dailyMix.cleanShare().doubleValue());
     }
@@ -85,8 +87,8 @@ class ChargingWindowTest {
         when(client.fetchGeneration(from, to.plus(Duration.ofDays(1)))).thenReturn(forecast);
 
         assertEquals(new ChargingWindow(afterGap, afterGap.plusSeconds(3600), 30),
-                service.findBestWindow(1, today).orElseThrow());
-        DailyEnergyMix dailyMix = service.getDailyMix(today.plusDays(1)).getFirst();
+                service.findBestWindow(1).orElseThrow());
+        DailyEnergyMix dailyMix = serviceOn(today.plusDays(1)).getDailyMix().getFirst();
         assertEquals(3, dailyMix.availableSlots());
         assertEquals(50.0, dailyMix.averageMix().get("wind").doubleValue());
         assertFalse(dailyMix.averageMix().containsKey("nuclear"));
@@ -103,8 +105,8 @@ class ChargingWindowTest {
         when(client.fetchGeneration(from, to.plus(Duration.ofDays(1)))).thenReturn(forecast);
 
         assertEquals(new ChargingWindow(from, from.plusSeconds(3600), 100),
-                service.findBestWindow(1, today).orElseThrow());
-        DailyEnergyMix dailyMix = service.getDailyMix(today.plusDays(1)).getFirst();
+                service.findBestWindow(1).orElseThrow());
+        DailyEnergyMix dailyMix = serviceOn(today.plusDays(1)).getDailyMix().getFirst();
         assertEquals(2, dailyMix.availableSlots());
         assertEquals(100.0, dailyMix.cleanShare().doubleValue());
     }
@@ -116,7 +118,11 @@ class ChargingWindowTest {
         when(client.fetchGeneration(horizon, Instant.parse("2026-10-27T00:00:00Z")))
                 .thenReturn(List.of(slot(start, 20), slot(start.plusSeconds(1800), 80)));
         assertEquals(new ChargingWindow(start, start.plusSeconds(3600), 50),
-                service.findBestWindow(1, LocalDate.of(2026, 10, 24)).orElseThrow());
+                serviceOn(LocalDate.of(2026, 10, 24)).findBestWindow(1).orElseThrow());
+    }
+
+    private EnergyMixService serviceOn(LocalDate day) {
+        return new EnergyMixService(client, Clock.fixed(day.atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
     }
 
     private GenerationSlot slot(Instant start, double wind) {
