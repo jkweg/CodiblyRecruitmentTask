@@ -2,6 +2,9 @@ package pl.evcharging.backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
 
 @SpringBootApplication
 public class BackendApplication {
@@ -10,4 +13,8 @@ public class BackendApplication {
         SpringApplication.run(BackendApplication.class, args);
     }
 
+    @Bean
+    Clock applicationClock() {
+        return Clock.systemUTC();
+    }
 }
