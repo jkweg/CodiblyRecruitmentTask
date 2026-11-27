@@ -40,28 +40,25 @@ function App() {
   }, [])
 
   return (
-    <main>
-      <h1>Ładowarki</h1>
-
-      {chargerList.status === 'loading' && <p role="status">Pobieranie ładowarek…</p>}
-      {chargerList.status === 'error' && (
-        <p role="alert">Nie udało się pobrać ładowarek. Odśwież stronę, żeby spróbować ponownie.</p>
-      )}
-      {chargerList.status === 'success' && chargerList.chargers.length === 0 && (
-        <p role="status">Brak ładowarek do wyświetlenia.</p>
-      )}
-      {chargerList.status === 'success' && chargerList.chargers.length > 0 && (
-        <ul>
-          {chargerList.chargers.map((charger) => (
-            <li key={charger.id}>
-              <strong>{charger.name}</strong> — {charger.location}
-            </li>
-          ))}
-        </ul>
-      )}
-      <EnergySection />
-      <ReservationsSection chargers={chargerList.status === 'success' ? chargerList.chargers : []} />
-    </main>
+    <>
+      <header className="planner-header">
+        <div className="planner-header-inner">
+          <h1><span aria-hidden="true" className="planner-mark">ϟ</span>Planer ładowania</h1>
+          <nav aria-label="Sekcje planera">
+            <a href="#energy-title">Miks energii</a>
+            <a href="#energy-search-title">Czyste okno</a>
+            <a href="#reservations-title">Rezerwacje</a>
+          </nav>
+        </div>
+      </header>
+      <main className="planner-main">
+        <EnergySection />
+        <ReservationsSection
+          chargers={chargerList.status === 'success' ? chargerList.chargers : []}
+          chargerStatus={chargerList.status}
+        />
+      </main>
+    </>
   )
 }
 

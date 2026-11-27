@@ -31,6 +31,10 @@ const fuelLabels: Record<string, string> = {
   biomass: 'Biomasa', coal: 'Węgiel', gas: 'Gaz', hydro: 'Woda', imports: 'Import',
   nuclear: 'Energia jądrowa', other: 'Inne', solar: 'Słońce', wind: 'Wiatr',
 }
+const fuelColors: Record<string, string> = {
+  wind: '#247653', nuclear: '#6854a2', biomass: '#79a84e', hydro: '#307da0',
+  solar: '#d2a231', gas: '#35455a', coal: '#724936', imports: '#c37a58', other: '#8894a1',
+}
 const calendarDate = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long', timeZone: 'UTC' })
 const londonDateTime = new Intl.DateTimeFormat('pl-PL', {
   timeZone: 'Europe/London', year: 'numeric', month: 'long', day: 'numeric',
@@ -42,8 +46,49 @@ function formatPercentage(value: number) {
   return percentage.format(value / 100)
 }
 
+function MixDetails({ day }: { day: DailyEnergyMix }) {
+  const fuels = Object.entries(day.averageMix).map(([fuel, share]) => ({
+    fuel, share, color: fuelColors[fuel] ?? '#8894a1',
+  }))
+  const total = fuels.reduce((sum, fuel) => sum + fuel.share, 0)
+  if (day.cleanShare === null || total <= 0) {
+    return <div className="panel mix-details"><p>Brak danych o miksie dla wybranego dnia.</p></div>
+  }
+
+  let accumulatedShare = 0
+  const segments = fuels.filter(({ share }) => share > 0).map(({ color, share }) => {
+    const start = accumulatedShare / total * 100
+    accumulatedShare += share
+    return `${color} ${start}% ${accumulatedShare / total * 100}%`
+  })
+  const ring = segments.length === 1
+    ? fuels.find(({ share }) => share > 0)?.color
+    : `conic-gradient(${segments.join(', ')})`
+
+  return (
+    <section className="panel mix-details" aria-labelledby="mix-detail-title">
+      <h3 id="mix-detail-title">Źródła energii <time dateTime={day.date}>{calendarDate.format(new Date(day.date))}</time></h3>
+      <div className="mix-details-content">
+        <div role="img" aria-label={`Wykres źródeł energii. Czysta energia ${formatPercentage(day.cleanShare)}`}
+          className="mix-ring" style={{ background: ring }}>
+          <div aria-hidden="true"><strong>{formatPercentage(day.cleanShare)}</strong><span>Czysta energia</span></div>
+        </div>
+        <dl className="energy-fuels" aria-label="Udziały źródeł energii">
+          {fuels.map(({ fuel, share, color }) => (
+            <div key={fuel}>
+              <dt><span aria-hidden="true" style={{ backgroundColor: color }} />{fuelLabels[fuel] ?? fuel}</dt>
+              <dd>{formatPercentage(share)}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  )
+}
+
 function DailyMixComparison() {
   const [mix, setMix] = useState<MixState>({ status: 'loading' })
+  const [selectedDate, setSelectedDate] = useState<string>()
 
   useEffect(() => {
     const request = new AbortController()
@@ -69,38 +114,33 @@ function DailyMixComparison() {
   const rankedDays = mix.days.filter((day) => day.cleanShare !== null)
   const highestShare = Math.max(...rankedDays.map((day) => day.cleanShare ?? 0))
   const leaders = rankedDays.filter((day) => day.cleanShare === highestShare)
+  const selected = mix.days.find((day) => day.date === selectedDate) ?? rankedDays[0] ?? mix.days[0]
 
   return (
-    <>
+    <div className="energy-comparison">
       {leaders.length > 0 && mix.days.some((day) => !day.complete) && (
-        <p>Porównanie opiera się na częściowych danych.</p>
+        <p className="data-note">Porównanie opiera się na częściowych danych.</p>
       )}
-      <div className="energy-days">
+      <div className="energy-days" role="group" aria-label="Wybierz dzień prognozy">
         {mix.days.map((day, index) => (
-          <article className="energy-card" key={day.date}>
-            <h3>{dayLabels[index]} <time dateTime={day.date}>{calendarDate.format(new Date(day.date))}</time></h3>
+          <button type="button" className="energy-card" key={day.date}
+            aria-pressed={selected?.date === day.date} onClick={() => setSelectedDate(day.date)}>
+            <strong className="day-name">{dayLabels[index]}</strong>
+            <time dateTime={day.date}>{calendarDate.format(new Date(day.date))}</time>
             {day.cleanShare === null ? (
-              <p>Brak danych o miksie.</p>
+              <span className="day-share day-empty">Brak danych o miksie.</span>
             ) : (
-              <p className="energy-share">Czysta energia <strong>{formatPercentage(day.cleanShare)}</strong></p>
+              <strong className="day-share">{formatPercentage(day.cleanShare)}</strong>
             )}
             {leaders.includes(day) && (
-              <p>{leaders.length > 1 ? 'Najwyższy udział ex aequo' : 'Najwyższy udział'}</p>
+              <span className="day-leader">{leaders.length > 1 ? 'Najwyższy udział ex aequo' : 'Najwyższy udział'}</span>
             )}
-            {!day.complete && <p>Pokrycie prognozy {day.availableSlots}/{day.expectedSlots} półgodzinnych slotów.</p>}
-            {Object.keys(day.averageMix).length > 0 && (
-              <dl className="energy-fuels">
-                {Object.entries(day.averageMix).map(([fuel, share]) => (
-                  <div key={fuel}>
-                    <dt>{fuelLabels[fuel] ?? fuel}</dt><dd>{formatPercentage(share)}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </article>
+            {!day.complete && <span className="day-coverage">Pokrycie {day.availableSlots}/{day.expectedSlots} slotów</span>}
+          </button>
         ))}
       </div>
-    </>
+      {selected && <MixDetails day={selected} />}
+    </div>
   )
 }
 
@@ -142,15 +182,15 @@ function ChargingWindowSearch() {
   }
 
   return (
-    <section className="energy-search" aria-labelledby="energy-search-title">
-      <h3 id="energy-search-title">Najczystsze okno ładowania</h3>
+    <section className="panel energy-search" aria-labelledby="energy-search-title">
+      <h3 id="energy-search-title" tabIndex={-1}>Najczystsze okno ładowania</h3>
       <p>Wyszukiwanie obejmuje jutro i pojutrze według czasu londyńskiego (Europe/London).</p>
       <form onSubmit={findWindow}>
         <label htmlFor="charging-hours">Czas ładowania</label>
         <select id="charging-hours" value={hours} onChange={(event) => changeDuration(Number(event.target.value))}>
           {durationOptions.map((duration) => <option key={duration} value={duration}>{duration} h</option>)}
         </select>
-        <button type="submit" disabled={search.status === 'loading'}>Znajdź okno</button>
+        <button className="primary-button" type="submit" disabled={search.status === 'loading'}>Znajdź okno</button>
       </form>
       {search.status === 'loading' && <p role="status">Szukam okna ładowania…</p>}
       {search.status === 'empty' && (
@@ -173,9 +213,14 @@ function ChargingWindowSearch() {
 export default function EnergySection() {
   return (
     <section className="energy-section" aria-labelledby="energy-title">
-      <h2 id="energy-title">Miks energii w Wielkiej Brytanii</h2>
-      <DailyMixComparison />
-      <ChargingWindowSearch />
+      <div className="section-heading">
+        <h2 id="energy-title" tabIndex={-1}>Miks energii w Wielkiej Brytanii</h2>
+        <p>Porównaj udział czystej energii dziś, jutro i pojutrze.</p>
+      </div>
+      <div className="energy-layout">
+        <div><DailyMixComparison /></div>
+        <ChargingWindowSearch />
+      </div>
     </section>
   )
 }

@@ -47,12 +47,14 @@ test('compares all three days and identifies a partial day with the highest avai
   render(<App />)
 
   const energy = screen.getByRole('region', { name: 'Miks energii w Wielkiej Brytanii' })
-  const [today, tomorrow, dayAfter] = await within(energy).findAllByRole('article')
-  expect(within(today).getByRole('heading').textContent).toContain('Dziś 24 października 2026')
-  expect(within(today).getByText('Wiatr')).toBeTruthy()
+  const choices = await within(energy).findByRole('group', { name: 'Wybierz dzień prognozy' })
+  const [today, tomorrow, dayAfter] = within(choices).getAllByRole('button')
+  expect(today.textContent).toContain('24 października 2026')
+  expect(today.getAttribute('aria-pressed')).toBe('true')
+  expect(within(energy).getByText('Wiatr')).toBeTruthy()
   expect(within(tomorrow).getByText('Najwyższy udział')).toBeTruthy()
   expect(within(tomorrow).getByText(/30\/50/)).toBeTruthy()
-  expect(within(dayAfter).getByRole('heading').textContent).toContain('Pojutrze 26 października 2026')
+  expect(dayAfter.textContent).toContain('26 października 2026')
   expect(within(dayAfter).getByText('Brak danych o miksie.')).toBeTruthy()
   expect(screen.getByText('Porównanie opiera się na częściowych danych.')).toBeTruthy()
   expect(screen.getAllByText('Najwyższy udział')).toHaveLength(1)
@@ -71,6 +73,30 @@ test('shows no leader when all three days lack data', async () => {
   render(<App />)
   expect(await screen.findAllByText('Brak danych o miksie.')).toHaveLength(3)
   expect(screen.queryByText(/Najwyższy udział/)).toBeNull()
+  expect(screen.queryByRole('img', { name: /Wykres źródeł energii/ })).toBeNull()
+})
+
+test('changes the selected day and keeps raw API percentages in the legend', async () => {
+  mockApi({ dailyMix: () => Response.json([
+    { ...mix[0], averageMix: { wind: 20, gas: 60 }, cleanShare: 18 },
+    mix[1], mix[2],
+  ]) })
+  render(<App />)
+  const todayRing = await screen.findByRole('img', { name: /Czysta energia 18/ })
+  expect(todayRing.getAttribute('style')).toMatch(/0% 25%.*25% 100%/)
+  expect(screen.getByText('Wiatr').closest('div')?.textContent).toMatch(/20\s*%/)
+  expect(screen.getByText('Gaz').closest('div')?.textContent).toMatch(/60\s*%/)
+  const windColor = screen.getByText('Wiatr').querySelector('span')?.style.backgroundColor
+  const tomorrow = screen.getByRole('button', { name: /^Jutro/ })
+  fireEvent.click(tomorrow)
+  expect(tomorrow.getAttribute('aria-pressed')).toBe('true')
+  expect(screen.getByRole('img', { name: /Czysta energia 65/ })).toBeTruthy()
+  expect(screen.getByText('Wiatr').querySelector('span')?.style.backgroundColor).toBe(windColor)
+  expect(screen.queryByText('Gaz')).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: /^Pojutrze/ }))
+  expect(screen.getByText('Brak danych o miksie dla wybranego dnia.')).toBeTruthy()
+  expect(screen.queryByRole('img', { name: /Wykres źródeł energii/ })).toBeNull()
 })
 
 test('requests the selected duration and shows dates, percentages and London offsets', async () => {
@@ -116,10 +142,10 @@ test('mix and search failures leave the charger list usable', async () => {
   })
   render(<App />)
   expect(await screen.findByText(/Nie udało się pobrać miksu/)).toBeTruthy()
-  expect(await screen.findByText('Ładowarka testowa')).toBeTruthy()
+  expect(await screen.findByRole('option', { name: /Ładowarka testowa.*Kraków/ })).toBeTruthy()
   submitSearch()
   expect(await screen.findByText(/Nie udało się znaleźć okna/)).toBeTruthy()
-  expect(screen.getByText('Ładowarka testowa')).toBeTruthy()
+  expect(screen.getByRole('option', { name: /Ładowarka testowa.*Kraków/ })).toBeTruthy()
 })
 
 test('ignores an old response that arrives after searching for a different duration', async () => {

@@ -46,7 +46,7 @@ function CalendarDays({ chargerId, date, days }: { chargerId: number; date: stri
                   const visibleStart = new Date(Math.max(from, Date.parse(start)))
                   const visibleEnd = new Date(Math.min(to, Date.parse(end)))
                   return (
-                    <li key={`${start}/${end}`}>
+                    <li className="busy-period" key={`${start}/${end}`}>
                       <time dateTime={visibleStart.toISOString()}>{londonTime.format(visibleStart)}</time>
                       {' – '}
                       <time dateTime={visibleEnd.toISOString()}>{londonTime.format(visibleEnd)}</time>
@@ -71,7 +71,7 @@ export default function ReservationCalendar({ chargerId, revision }: { chargerId
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && !date.startsWith('0000')
 
   return (
-    <section aria-labelledby="reservation-calendar-title">
+    <section className="panel reservation-calendar" aria-labelledby="reservation-calendar-title">
       <h3 id="reservation-calendar-title">Kalendarz zajętości</h3>
       <div className="reservation-fields">
         <label>Data w kalendarzu <input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>

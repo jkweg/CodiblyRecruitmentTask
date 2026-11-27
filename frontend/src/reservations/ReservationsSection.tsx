@@ -15,7 +15,10 @@ type Notice = { kind: 'error' | 'success'; text: string }
 
 const durationOptions = [1, 2, 3, 4, 5, 6]
 
-export default function ReservationsSection({ chargers }: { chargers: Charger[] }) {
+export default function ReservationsSection({ chargers, chargerStatus }: {
+  chargers: Charger[]
+  chargerStatus: 'loading' | 'error' | 'success'
+}) {
   const [selection, setSelection] = useState<number>()
   const chargerId = chargers.find(({ id }) => id === selection)?.id ?? chargers[0]?.id
   const [start, setStart] = useState('')
@@ -138,36 +141,47 @@ export default function ReservationsSection({ chargers }: { chargers: Charger[] 
 
   return (
     <section className="reservations-section" aria-labelledby="reservations-title">
-      <h2 id="reservations-title">Rezerwacje ładowarek</h2>
-      <p>Daty i godziny wpisujesz i odczytujesz w czasie londyńskim (Europe/London).</p>
-      <label className="reservation-charger">Ładowarka do rezerwacji i kalendarza
-        <select value={chargerId ?? ''} disabled={chargers.length === 0 || pending !== null}
-          onChange={(event) => setSelection(Number(event.target.value))}>
-          {chargers.length === 0 && <option value="">Brak dostępnych ładowarek</option>}
-          {chargers.map((charger) => <option key={charger.id} value={charger.id}>{charger.name} — {charger.location}</option>)}
-        </select>
-      </label>
+      <div className="section-heading">
+        <h2 id="reservations-title" tabIndex={-1}>Rezerwacje ładowarek</h2>
+        <p>Daty i godziny wpisujesz i odczytujesz w czasie londyńskim (Europe/London).</p>
+      </div>
+      <div className="reservation-layout">
+        <section className="panel reservation-form-card" aria-labelledby="reservation-form-title">
+          <h3 id="reservation-form-title">Nowa rezerwacja</h3>
+          {chargerStatus === 'loading' && <p role="status">Pobieranie ładowarek…</p>}
+          {chargerStatus === 'error' && (
+            <p role="alert">Nie udało się pobrać ładowarek. Odśwież stronę, żeby spróbować ponownie.</p>
+          )}
+          {chargerStatus === 'success' && chargers.length === 0 && <p role="status">Brak ładowarek do wyświetlenia.</p>}
 
-      <section aria-labelledby="reservation-form-title">
-        <h3 id="reservation-form-title">Nowa rezerwacja</h3>
-        <form className="reservation-fields" onSubmit={reserve}>
-          <label>Początek rezerwacji
-            <input type="datetime-local" required value={start} disabled={pending !== null}
-              onChange={(event) => setStart(event.target.value)} />
-          </label>
-          <label>Czas rezerwacji
-            <select value={hours} disabled={pending !== null} onChange={(event) => setHours(Number(event.target.value))}>
-              {durationOptions.map((duration) => <option key={duration} value={duration}>{duration} h</option>)}
-            </select>
-          </label>
-          <button type="submit" disabled={own.status !== 'ready' || chargerId === undefined || pending !== null}>
-            {pending?.kind === 'create' ? 'Zapisywanie…' : 'Zarezerwuj'}
-          </button>
-        </form>
-        {notice && <p role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</p>}
-      </section>
+          <form className="reservation-fields" onSubmit={reserve}>
+            <label className="reservation-charger">Ładowarka do rezerwacji i kalendarza
+              <select value={chargerId ?? ''} disabled={chargers.length === 0 || pending !== null}
+                onChange={(event) => setSelection(Number(event.target.value))}>
+                {chargers.length === 0 && <option value="">Wybierz ładowarkę</option>}
+                {chargers.map((charger) => <option key={charger.id} value={charger.id}>{charger.name} — {charger.location}</option>)}
+              </select>
+            </label>
+            <label>Początek rezerwacji
+              <input type="datetime-local" required value={start} disabled={pending !== null}
+                onChange={(event) => setStart(event.target.value)} />
+            </label>
+            <label>Czas rezerwacji
+              <select value={hours} disabled={pending !== null} onChange={(event) => setHours(Number(event.target.value))}>
+                {durationOptions.map((duration) => <option key={duration} value={duration}>{duration} h</option>)}
+              </select>
+            </label>
+            <button type="submit" className="primary-button" disabled={own.status !== 'ready' || chargerId === undefined || pending !== null}>
+              {pending?.kind === 'create' ? 'Zapisywanie…' : 'Zarezerwuj'}
+            </button>
+          </form>
+          {notice && <p className={notice.kind === 'success' ? 'success-note' : undefined}
+            role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</p>}
+        </section>
+        <ReservationCalendar chargerId={chargerId} revision={calendarRevision} />
+      </div>
 
-      <section aria-labelledby="own-reservations-title">
+      <section className="panel reservation-own" aria-labelledby="own-reservations-title">
         <h3 id="own-reservations-title">Moje rezerwacje</h3>
         {own.status === 'loading' && <p role="status">Pobieranie własnych rezerwacji…</p>}
         {own.status === 'error' && (
@@ -192,7 +206,6 @@ export default function ReservationsSection({ chargers }: { chargers: Charger[] 
           </ul>
         ))}
       </section>
-      <ReservationCalendar chargerId={chargerId} revision={calendarRevision} />
     </section>
   )
 }
