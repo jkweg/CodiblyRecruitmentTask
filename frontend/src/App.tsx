@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react'
 import EnergySection from './energy/EnergySection'
+import ReservationsSection from './reservations/ReservationsSection'
+import type { Charger } from './reservations/reservationApi'
 import './App.css'
-
-type Charger = {
-  id: number
-  name: string
-  location: string
-}
 
 type ChargerListState =
   | { status: 'loading' }
@@ -64,6 +60,7 @@ function App() {
         </ul>
       )}
       <EnergySection />
+      <ReservationsSection chargers={chargerList.status === 'success' ? chargerList.chargers : []} />
     </main>
   )
 }

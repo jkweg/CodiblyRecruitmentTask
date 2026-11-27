@@ -22,6 +22,7 @@ function mockApi({
 }: { dailyMix?: () => Response; bestWindow?: BestWindowResponder } = {}) {
   vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
     if (url === '/api/chargers') return Response.json(chargers)
+    if (url === '/api/reservations' || url.startsWith('/api/chargers/1/availability?')) return Response.json([])
     if (url === '/api/energy/mix') return dailyMix()
     if (url.startsWith('/api/energy/best-window?')) return bestWindow(url, options?.signal)
     throw new Error(`Unexpected request: ${url}`)
@@ -45,7 +46,8 @@ test('compares all three days and identifies a partial day with the highest avai
   mockApi()
   render(<App />)
 
-  const [today, tomorrow, dayAfter] = await screen.findAllByRole('article')
+  const energy = screen.getByRole('region', { name: 'Miks energii w Wielkiej Brytanii' })
+  const [today, tomorrow, dayAfter] = await within(energy).findAllByRole('article')
   expect(within(today).getByRole('heading').textContent).toContain('Dziś 24 października 2026')
   expect(within(today).getByText('Wiatr')).toBeTruthy()
   expect(within(tomorrow).getByText('Najwyższy udział')).toBeTruthy()
