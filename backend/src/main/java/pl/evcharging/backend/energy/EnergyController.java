@@ -1,7 +1,5 @@
 package pl.evcharging.backend.energy;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -11,15 +9,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/energy")
 public class EnergyController {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(EnergyController.class);
 
     private final EnergyMixService energyMixService;
 
@@ -44,12 +39,7 @@ public class EnergyController {
     }
 
     @ExceptionHandler(RestClientException.class)
-    public ProblemDetail handleUpstreamError(RestClientException error) {
-        if (error instanceof RestClientResponseException responseError) {
-            LOGGER.warn("Carbon Intensity API returned HTTP {}", responseError.getStatusCode().value());
-        } else {
-            LOGGER.warn("Carbon Intensity API request failed ({})", error.getClass().getSimpleName());
-        }
+    public ProblemDetail handleUpstreamError() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY,
                 "Nie udało się pobrać danych z Carbon Intensity API.");
     }
