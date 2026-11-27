@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import EnergySection from './energy/EnergySection'
 import './App.css'
 
 type Charger = {
@@ -7,9 +8,13 @@ type Charger = {
   location: string
 }
 
+type ChargerListState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'success'; chargers: Charger[] }
+
 function App() {
-  const [chargers, setChargers] = useState<Charger[]>([])
-  const [hasError, setHasError] = useState(false)
+  const [chargerList, setChargerList] = useState<ChargerListState>({ status: 'loading' })
 
   useEffect(() => {
     const controller = new AbortController()
@@ -21,10 +26,17 @@ function App() {
         }
         return response.json()
       })
-      .then((data: Charger[]) => setChargers(data))
+      .then((chargers: Charger[]) => {
+        if (!Array.isArray(chargers)) {
+          throw new Error('Expected a list of chargers')
+        }
+        if (!controller.signal.aborted) {
+          setChargerList({ status: 'success', chargers })
+        }
+      })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setHasError(true)
+          setChargerList({ status: 'error' })
         }
       })
 
@@ -35,17 +47,23 @@ function App() {
     <main>
       <h1>Ładowarki</h1>
 
-      {hasError ? (
-        <p role="alert">Nie udało się pobrać ładowarek.</p>
-      ) : (
+      {chargerList.status === 'loading' && <p role="status">Pobieranie ładowarek…</p>}
+      {chargerList.status === 'error' && (
+        <p role="alert">Nie udało się pobrać ładowarek. Odśwież stronę, żeby spróbować ponownie.</p>
+      )}
+      {chargerList.status === 'success' && chargerList.chargers.length === 0 && (
+        <p role="status">Brak ładowarek do wyświetlenia.</p>
+      )}
+      {chargerList.status === 'success' && chargerList.chargers.length > 0 && (
         <ul>
-          {chargers.map((charger) => (
+          {chargerList.chargers.map((charger) => (
             <li key={charger.id}>
               <strong>{charger.name}</strong> — {charger.location}
             </li>
           ))}
         </ul>
       )}
+      <EnergySection />
     </main>
   )
 }
