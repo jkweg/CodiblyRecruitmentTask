@@ -10,14 +10,16 @@ import java.util.List;
 @RequestMapping(path = "/api/chargers")
 public class ChargerController {
 
-    ChargerRepository repository;
+    private final ChargerRepository repository;
 
-    public ChargerController(ChargerRepository repository){
+    public ChargerController(ChargerRepository repository) {
         this.repository = repository;
     }
 
     @GetMapping
-    public List<Charger> findAllChargers(){
-        return repository.findAll();
+    public List<ChargerResponse> findAllChargers() {
+        return repository.findAll().stream()
+                .map(charger -> new ChargerResponse(charger.getId(), charger.getName(), charger.getLocation()))
+                .toList();
     }
 }

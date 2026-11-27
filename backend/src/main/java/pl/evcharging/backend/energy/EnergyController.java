@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 
@@ -38,7 +37,7 @@ public class EnergyController {
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
-    @ExceptionHandler(RestClientException.class)
+    @ExceptionHandler(CarbonIntensityException.class)
     public ProblemDetail handleUpstreamError() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY,
                 "Nie udało się pobrać danych z Carbon Intensity API.");

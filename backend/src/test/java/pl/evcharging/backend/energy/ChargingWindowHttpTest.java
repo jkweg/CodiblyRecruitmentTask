@@ -6,7 +6,6 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.client.RestClientException;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -51,8 +50,9 @@ class ChargingWindowHttpTest {
 
     @Test
     void returnsBadGatewayWhenProviderFails() throws Exception {
-        when(service.findBestWindow(2)).thenThrow(new RestClientException("Provider unavailable"));
+        when(service.findBestWindow(2)).thenThrow(CarbonIntensityException.httpStatus(503));
         mvc.perform(get(PATH).param("hours", "2")).andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.status").value(502));
+                .andExpect(jsonPath("$.status").value(502))
+                .andExpect(jsonPath("$.detail").value("Nie udało się pobrać danych z Carbon Intensity API."));
     }
 }

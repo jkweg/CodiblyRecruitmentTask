@@ -120,7 +120,8 @@ class ReservationIntegrationTest {
         Cookie owner = newOwner();
         create(owner, 1, "2026-10-26T10:00:00Z", "1").andExpect(status().isCreated());
         create(owner, 1, "2026-10-26T11:00:00Z", "1").andExpect(status().isCreated());
-        create(owner, 2, "2026-10-26T10:00:00Z", "1").andExpect(status().isCreated());
+        create(owner, 2, "2026-10-26T10:00:00Z", "6").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.end").value("2026-10-26T16:00:00Z"));
         availability(1, "2026-10-26T10:30:00Z", "2026-10-26T11:30:00Z")
                 .andExpect(jsonPath("$.length()").value(2));
     }

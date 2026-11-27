@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
-import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.exc.MismatchedInputException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -29,6 +29,9 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static pl.evcharging.backend.reservation.CreateReservationRequest.INVALID_CHARGER_ID;
+import static pl.evcharging.backend.reservation.CreateReservationRequest.INVALID_HOURS;
 
 @RestController
 public class ReservationController {
@@ -46,18 +49,17 @@ public class ReservationController {
     @PostMapping(RESERVATIONS_PATH)
     public ResponseEntity<ReservationResponse> create(@RequestBody CreateReservationRequest input,
             @CookieValue(name = OWNER_COOKIE, required = false) String token, HttpServletRequest request) {
-        if (input.chargerId() == null || !input.chargerId().isIntegralNumber()
-                || !input.chargerId().canConvertToLong() || input.chargerId().longValue() < 1) {
-            throw badRequest("Podaj dodatni identyfikator ładowarki (chargerId).");
+        if (input.chargerId() == null || input.chargerId() < 1) {
+            throw badRequest(INVALID_CHARGER_ID);
         }
-        if (input.hours() == null || !input.hours().isIntegralNumber() || !input.hours().canConvertToInt()) {
-            throw badRequest("Czas rezerwacji musi wynosić od 1 do 6 pełnych godzin.");
+        if (input.hours() == null) {
+            throw badRequest(INVALID_HOURS);
         }
 
         Instant start = parseInstant(input.start(), "start");
         UUID existingOwner = readOwner(token);
         UUID owner = existingOwner == null ? UUID.randomUUID() : existingOwner;
-        Reservation saved = reservationService.create(input.chargerId().longValue(), owner, start, input.hours().intValue());
+        Reservation saved = reservationService.create(input.chargerId(), owner, start, input.hours());
         ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore());
         if (existingOwner == null) {
             response.header(HttpHeaders.SET_COOKIE, ownerCookie(owner, request));
@@ -109,9 +111,14 @@ public class ReservationController {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    ProblemDetail handleInvalidBody() {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                "Podaj poprawny JSON z polami chargerId, start i hours.");
+    ProblemDetail handleInvalidBody(HttpMessageNotReadableException error) {
+        String detail = "Podaj poprawny JSON z polami chargerId, start i hours.";
+        if (error.getCause() instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+            String field = mismatch.getPath().getFirst().getPropertyName();
+            if ("chargerId".equals(field)) detail = INVALID_CHARGER_ID;
+            if ("hours".equals(field)) detail = INVALID_HOURS;
+        }
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -158,9 +165,6 @@ public class ReservationController {
                 .sameSite("Lax")
                 .maxAge(Duration.ofDays(365))
                 .build().toString();
-    }
-
-    public record CreateReservationRequest(JsonNode chargerId, String start, JsonNode hours) {
     }
 
     public record ReservationResponse(long id, long chargerId, Instant start, Instant end) {

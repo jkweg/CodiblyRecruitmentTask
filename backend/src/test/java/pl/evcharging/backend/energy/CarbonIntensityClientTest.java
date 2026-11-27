@@ -9,7 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.client.RestClientException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import javax.net.ssl.SSLHandshakeException;
@@ -31,6 +31,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -139,7 +142,11 @@ class CarbonIntensityClientTest {
             }
         });
 
-        assertThrows(RestClientException.class, () -> newClient(Duration.ofMillis(600)).fetchGeneration(FROM, TO));
+        var error = assertThrows(CarbonIntensityException.class,
+                () -> newClient(Duration.ofMillis(600)).fetchGeneration(FROM, TO));
+        assertEquals(CarbonIntensityException.Category.HTTP_STATUS, error.category());
+        assertEquals(400, error.httpStatus());
+        assertNull(error.getCause());
         assertEquals(1, calls.get());
         assertTrue(output.getAll().contains("cause=HTTP_STATUS"));
         assertTrue(output.getAll().contains("httpStatus=400 retry=false"));
@@ -156,7 +163,11 @@ class CarbonIntensityClientTest {
             }
         });
 
-        assertThrows(RestClientException.class, () -> newClient(Duration.ofSeconds(5)).fetchGeneration(FROM, TO));
+        var error = assertThrows(CarbonIntensityException.class,
+                () -> newClient(Duration.ofSeconds(5)).fetchGeneration(FROM, TO));
+        assertEquals(CarbonIntensityException.Category.INVALID_DATA, error.category());
+        assertNull(error.httpStatus());
+        assertInstanceOf(JacksonException.class, error.getCause());
         assertEquals(1, calls.get());
         assertTrue(output.getAll().contains("cause=INVALID_DATA"));
     }
@@ -178,14 +189,18 @@ class CarbonIntensityClientTest {
 
     @Test
     void classifiesWrappedTransportFailuresBySafeType() {
-        assertCategory(CarbonIntensityClient.Failure.TIMEOUT, new HttpTimeoutException("timeout"));
-        assertCategory(CarbonIntensityClient.Failure.DNS, new UnknownHostException("address"));
-        assertCategory(CarbonIntensityClient.Failure.TLS, new SSLHandshakeException("handshake"));
-        assertCategory(CarbonIntensityClient.Failure.TRANSPORT, new SocketException("connection reset"));
+        assertCategory(CarbonIntensityException.Category.TIMEOUT, new HttpTimeoutException("timeout"));
+        assertCategory(CarbonIntensityException.Category.DNS, new UnknownHostException("address"));
+        assertCategory(CarbonIntensityException.Category.TLS, new SSLHandshakeException("handshake"));
+        assertCategory(CarbonIntensityException.Category.TRANSPORT, new SocketException("connection reset"));
     }
 
-    private static void assertCategory(CarbonIntensityClient.Failure expected, Exception cause) {
-        assertEquals(expected, CarbonIntensityClient.classify(new RestClientException("test", new IOException(cause))));
+    private static void assertCategory(CarbonIntensityException.Category expected, Exception cause) {
+        IOException wrapped = new IOException(cause);
+        CarbonIntensityException error = CarbonIntensityException.transport(wrapped);
+        assertEquals(expected, error.category());
+        assertSame(wrapped, error.getCause());
+        assertNull(error.httpStatus());
     }
 
     private CarbonIntensityClient newClient(Duration timeout) {
