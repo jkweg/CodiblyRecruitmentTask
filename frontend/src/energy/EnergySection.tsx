@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import './EnergySection.css'
 
 type DailyEnergyMix = {
@@ -75,7 +75,8 @@ function MixDetails({ day }: { day: DailyEnergyMix }) {
         </div>
         <dl className="energy-fuels" aria-label="Udziały źródeł energii">
           {fuels.map(({ fuel, share, color }) => (
-            <div key={fuel}>
+            // The row background draws a thin share bar, so the list keeps valid dt/dd markup.
+            <div key={fuel} style={{ '--fuel-color': color, '--fuel-share': `${Math.min(Math.max(share, 0), 100)}%` } as CSSProperties}>
               <dt><span aria-hidden="true" style={{ backgroundColor: color }} />{fuelLabels[fuel] ?? fuel}</dt>
               <dd>{formatPercentage(share)}</dd>
             </div>
@@ -123,14 +124,19 @@ function DailyMixComparison() {
       )}
       <div className="energy-days" role="group" aria-label="Wybierz dzień prognozy">
         {mix.days.map((day, index) => (
-          <button type="button" className="energy-card" key={day.date}
+          <button type="button" className={leaders.includes(day) ? 'energy-card is-leader' : 'energy-card'} key={day.date}
             aria-pressed={selected?.date === day.date} onClick={() => setSelectedDate(day.date)}>
             <strong className="day-name">{dayLabels[index]}</strong>
             <time dateTime={day.date}>{calendarDate.format(new Date(day.date))}</time>
             {day.cleanShare === null ? (
               <span className="day-share day-empty">Brak danych o miksie.</span>
             ) : (
-              <strong className="day-share">{formatPercentage(day.cleanShare)}</strong>
+              <>
+                <strong className="day-share">{formatPercentage(day.cleanShare)}</strong>
+                <span className="day-meter" aria-hidden="true">
+                  <span style={{ width: `${Math.min(Math.max(day.cleanShare, 0), 100)}%` }} />
+                </span>
+              </>
             )}
             {leaders.includes(day) && (
               <span className="day-leader">{leaders.length > 1 ? 'Najwyższy udział ex aequo' : 'Najwyższy udział'}</span>

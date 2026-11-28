@@ -54,7 +54,7 @@ export default function ReservationsSection({ chargers, chargerStatus }: {
 
           <form className="reservation-fields" onSubmit={submitReservation}>
             <label className="reservation-charger">Ładowarka do rezerwacji i kalendarza
-              <select value={chargerId ?? ''} disabled={chargers.length === 0 || pending !== null}
+              <select id="reservation-charger" value={chargerId ?? ''} disabled={chargers.length === 0 || pending !== null}
                 onChange={(event) => setSelection(Number(event.target.value))}>
                 {chargers.length === 0 && <option value="">Wybierz ładowarkę</option>}
                 {chargers.map((charger) => <option key={charger.id} value={charger.id}>{charger.name} — {charger.location}</option>)}
@@ -85,17 +85,17 @@ export default function ReservationsSection({ chargers, chargerStatus }: {
         {own.status === 'error' && (
           <>
             <p role="alert">Nie udało się pobrać własnych rezerwacji. Spróbuj ponownie, żeby odblokować zapis.</p>
-            <button type="button" onClick={retrySession}>Ponów odczyt rezerwacji</button>
+            <button type="button" className="secondary-button" onClick={retrySession}>Ponów odczyt rezerwacji</button>
           </>
         )}
         {own.status === 'ready' && (own.reservations.length === 0 ? <p>Nie masz rezerwacji.</p> : (
           <ul className="reservation-list">
             {own.reservations.map((reservation) => (
-              <li className="reservation-card" key={reservation.id}>
+              <li className="reservation-card own-reservation" key={reservation.id}>
                 <strong>{chargers.find(({ id }) => id === reservation.chargerId)?.name ?? `Ładowarka nr ${reservation.chargerId}`}</strong>
-                <p>Początek <time dateTime={reservation.start}>{londonDateTime.format(new Date(reservation.start))}</time></p>
-                <p>Koniec <time dateTime={reservation.end}>{londonDateTime.format(new Date(reservation.end))}</time></p>
-                <button type="button" disabled={pending !== null} onClick={() => void cancel(reservation.id)}>
+                <p><span className="own-label">Początek</span> <time dateTime={reservation.start}>{londonDateTime.format(new Date(reservation.start))}</time></p>
+                <p><span className="own-label">Koniec</span> <time dateTime={reservation.end}>{londonDateTime.format(new Date(reservation.end))}</time></p>
+                <button type="button" className="danger-button" disabled={pending !== null} onClick={() => void cancel(reservation.id)}>
                   {pending?.kind === 'cancel' && pending.id === reservation.id
                     ? 'Anulowanie…' : `Anuluj rezerwację nr ${reservation.id}`}
                 </button>

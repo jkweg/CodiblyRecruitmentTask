@@ -8,16 +8,40 @@
   --ink: #1b293b;
   --muted: #506071;
   --panel: #fff;
+  --surface: #f8f8f3;
   --border: #dce2dc;
+  --control-border: #a3b1a9;
+  /* Green carries primary actions, success and the cleanest-day mark. */
   --accent: #146147;
   --accent-dark: #0c4833;
-  --accent-soft: #e9f4ed;
-  --warning: #77431c;
-  --warning-soft: #fff2de;
+  --accent-soft: #e8f3ec;
+  /* Blue marks the user's current choice. */
+  --select: #2457a6;
+  --select-dark: #1a3f78;
+  --select-soft: #edf3fc;
+  /* Amber flags partial data, red reports failures, plum marks occupied time. */
+  --warning: #774300;
+  --warning-soft: #fff4d6;
+  --warning-line: #d79b1c;
+  --danger: #a1262b;
+  --danger-soft: #fdeeee;
+  --danger-line: #d8585c;
+  --busy: #7c2858;
+  --busy-soft: #fbeff6;
+  --busy-line: #b9467f;
+  /* Warm orange belongs to the brand and the current section in the navigation. */
+  --brand-orange: #e07a2e;
+  --brand-orange-ink: #9a4510;
+  --brand-orange-soft: #fdf0e4;
+  --brand-orange-line: #f2c9a5;
   --radius: 0.9rem;
+  /* Room for the sticky header when a link scrolls a section into view. */
+  --header-space: 6.5rem;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-padding-top: var(--header-space); }
 
 body { margin: 0; min-width: 0; }
 h1, h2, h3, h4, p, dl, dd { margin: 0; }
@@ -27,21 +51,33 @@ button, input, select { font: inherit; color: inherit; max-width: 100%; min-widt
 button, input, select {
   min-height: 2.75rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #a9b7ae;
-  border-radius: 0.5rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.55rem;
   background: var(--panel);
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
+input:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--muted); }
+
 button { font-weight: 650; cursor: pointer; }
-button:hover:not(:disabled) { background: var(--accent-soft); }
-button:disabled, select:disabled, input:disabled { opacity: 0.65; }
-button:disabled { cursor: default; }
+button:hover:not(:disabled) { border-color: var(--muted); background: var(--surface); }
+button:disabled, select:disabled, input:disabled { opacity: 0.6; }
+button:disabled { cursor: not-allowed; }
 a { color: inherit; }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--select);
   outline-offset: 3px;
 }
 
 label { font-weight: 600; }
 input, select { font-weight: normal; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
